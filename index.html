@@ -1,0 +1,199 @@
+<html>
+
+<head>
+    <title>Test Game</title>
+    <script src="PlayerIOClient.development.js"></script>
+    <canvas id="canvas"></canvas>
+
+    <script>
+        let started = false;
+        var global = {
+            connection: null,
+            users: {}
+        }
+        let c = document.getElementById("canvas");
+        let ctx = c.getContext("2d");
+        c.width = window.innerWidth;
+        c.height = window.innerHeight;
+
+        let cursor = 0;
+        let textRow = 0;
+        let newUserId = "";
+        let playerMessage = "";
+        let scene = 0;
+        let room = "";
+        let RandomOrDefined = false; //Is the room a random room or a defined room
+        addChatLine("notice", "", "Input username:");
+        document.onkeydown = e => {
+            if (!(e.keyCode < 48 || (e.keyCode > 91 && e.keyCode < 186)) || e.keyCode == "32") {
+                let startString = playerMessage.substring(0, cursor + 1);
+                let endString = playerMessage.substring(cursor + 1, playerMessage.length);
+                playerMessage = startString + e.key + endString;
+                cursor++;
+            }
+
+            if (e.key == "Backspace") {
+                if (cursor != -1) {
+                    let startString = playerMessage.substring(0, cursor);
+                    let endString = playerMessage.substring(cursor + 1, playerMessage.length);
+                    playerMessage = startString + endString;
+                    cursor--;
+                }
+
+            }
+            if (e.key == "ArrowLeft") cursor--;
+            if (e.key == "ArrowRight") cursor++;
+            cursor = Math.min(Math.max(cursor, -1), playerMessage.length - 1);
+            ctx.font = "20px Arial";
+            ctx.clearRect(0, c.height - 40, c.width, 40);
+            ctx.fillStyle = "black";
+            ctx.fillText(playerMessage, 20, c.height - 20);
+            let len = playerMessage.substring(0, cursor + 1);
+            let width = ctx.measureText(len).width;
+            ctx.fillRect(width + 20, c.height - 37, 1, 20);
+            if (e.key == "Enter" && playerMessage.length > 0) {
+                addChatLine("message", newUserId, playerMessage);
+                let text = playerMessage;
+                playerMessage = "";
+                ctx.clearRect(0, c.height - 40, c.width, 40);
+                if (scene == 3)
+                    global.connection.send('msg', text);
+                if (scene == 2) {
+                    room = text;
+                    scene = 3;
+                    addChatLine("notice", "", "Joining room " + room);
+                    start();
+                }
+                if (scene == 1) {
+                    if (text == "Y") {
+                        RandomOrDefined = true;
+                        scene = 3;
+                        addChatLine("notice", "", "Creating a random room to join.");
+                        start();
+                    } else if (text == "N") {
+                        scene = 2;
+                        addChatLine("notice", "", "Input room ID:");
+                    } else {
+                        addChatLine("error", "", "\"" + text + "\" is not a valid input.");
+                    }
+                }
+                if (scene == 0) {
+                    scene = 1;
+                    newUserId = text;
+                    let nameLength = ctx.measureText(text).width;
+                    ctx.fillText(text, c.width - nameLength - 10, 30);
+                    addChatLine("notice", "", "Generate a random room (Y) or input a room (N)?");
+                }
+
+                cursor = 0;
+            }
+        }
+
+        function start() {
+
+            PlayerIO.authenticate("test-game-ue9bkyltk6wozndkbdwa", "public", {
+                userId: newUserId
+            }, {}, function (client) {
+                addChatLine('notice', '', 'connected to PlayerIO')
+
+                if (RandomOrDefined) {
+                    room = Math.floor(Math.random() * 10000) + "";
+                    let list = client.multiplayer.listRooms("Chat", {}, 0, 0, (rooms) => {
+                        let len = rooms.length;
+                        if (len > 0) {
+                            for (let i = 0; i < len; i++) {
+                                if (rooms[i].id == room) {
+                                    room = Math.floor(Math.random() * 10000) + "";
+                                }
+                            }
+                        }
+                    });
+                    let roomTextLength = ctx.measureText(room).width;
+                    ctx.fillText(room, c.width - roomTextLength - 10, 50);
+                }
+                client.multiplayer.createJoinRoom(room, 'Chat', true, null, {
+                    name: newUserId
+                }, function (connection) {
+                    global.connection = connection
+                    addChatLine('notice', '', 'connected to room')
+                    connection.addMessageCallback("*", function (message) {
+                        if (textRow > 15) {
+                            let diff = 15 - textRow
+                            textRow = 15;
+                            let imageData = ctx.getImageData(0, 0, c.width, c.height / 8 * 7);
+                            ctx.putImageData(imageData, 0, 30 * diff);
+                        }
+                        switch (message.type) {
+                            case "join":
+                                handleJoin(message);
+                                break;
+                            case "left":
+                                handleLeft(message);
+                                break;
+                            case "msg":
+                                handleMsg(message);
+                                break;
+                        }
+                    });
+                    //Setup a disconnect handler:
+                    connection.addDisconnectCallback(function () {
+                        addChatLine("error", "", "disconnected from room");
+                    });
+                }, callbackError)
+            }, callbackError)
+        }
+
+        function callbackError(error) {
+            addChatLine("error", '', "ERROR: " + error.code + ": " + error.message)
+        }
+
+        function handleJoin(message) {
+            var user = {
+                id: message.getInt(0),
+                name: message.getString(1),
+            }
+            global.users[user.id] = user
+            addChatLine("notice", '', user.name + " joined")
+        }
+
+        function handleLeft(message) {
+            var user = global.users[message.getInt(0)]
+            if (user != null) {
+                delete global.users[user.id]
+                addChatLine("notice", '', user.name + " left")
+            }
+        }
+
+        function handleMsg(message) {
+            var user = global.users[message.getInt(0)]
+            if (user != null && user.name != newUserId) {
+                addChatLine("message", user.name, message.getString(1))
+            }
+        }
+
+        function addChatLine(type, name, text) {
+            if (type == "error") {
+                ctx.fillStyle = "red";
+            } else {
+                ctx.fillStyle = "black";
+            }
+            ctx.font = "bold 20px Arial";
+            if (type == "notice") {
+                ctx.font = "italic " + ctx.font;
+            }
+            let len = ctx.measureText(name ? name + ": " : "").width;
+            ctx.fillText(name ? name + ": " : "", 10, 30 * textRow + 20);
+            ctx.font = "20px Arial"
+            if (type == "notice") {
+                ctx.font = "italic " + ctx.font;
+            }
+            ctx.fillText(text, len + 10, 30 * textRow + 20);
+            textRow++;
+        }
+    </script>
+</head>
+
+<body style="margin: 0;">
+</body>
+
+</html>
