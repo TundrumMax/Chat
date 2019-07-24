@@ -94,6 +94,7 @@
             PlayerIO.authenticate("test-game-ue9bkyltk6wozndkbdwa", "public", {
                 userId: newUserId
             }, {}, function (client) {
+                client.isSecure = true;
                 addChatLine('notice', '', 'connected to PlayerIO')
 
                 if (RandomOrDefined) {
