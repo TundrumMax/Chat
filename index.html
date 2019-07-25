@@ -23,6 +23,9 @@
         let scene = 0;
         let room = "";
         let RandomOrDefined = false; //Is the room a random room or a defined room
+        function splitarr(arr, n) {
+            return arr.split("").map((a, b, c) => c.slice(b, b + n).join("")).filter((a, b) => b % n == 0)
+        }
         addChatLine("notice", "", "Input username:");
         document.onkeydown = e => {
             if (!(e.keyCode < 48 || (e.keyCode > 91 && e.keyCode < 186)) || e.keyCode == "32") {
@@ -78,11 +81,16 @@
                     }
                 }
                 if (scene == 0) {
-                    scene = 1;
-                    newUserId = text;
-                    let nameLength = ctx.measureText(text).width;
-                    ctx.fillText(text, c.width - nameLength - 10, 30);
-                    addChatLine("notice", "", "Generate a random room (Y) or input a room (N)?");
+                    if (text.length < 15) {
+                        scene = 1;
+                        newUserId = text;
+                        let nameLength = ctx.measureText(text).width;
+                        ctx.fillText(text, c.width - nameLength - 10, 30);
+                        addChatLine("notice", "", "Generate a random room (Y) or input a room (N)?");
+                    } else {
+                        addChatLine("error", "", "Name was too long, enter a name smaller than 15 characters");
+                    }
+
                 }
 
                 cursor = 0;
@@ -117,12 +125,7 @@
                     global.connection = connection
                     addChatLine('notice', '', 'connected to room')
                     connection.addMessageCallback("*", function (message) {
-                        if (textRow > 15) {
-                            let diff = 15 - textRow
-                            textRow = 15;
-                            let imageData = ctx.getImageData(0, 0, c.width, c.height / 8 * 7);
-                            ctx.putImageData(imageData, 0, 30 * diff);
-                        }
+
                         switch (message.type) {
                             case "join":
                                 handleJoin(message);
@@ -134,6 +137,7 @@
                                 handleMsg(message);
                                 break;
                         }
+
                     });
                     //Setup a disconnect handler:
                     connection.addDisconnectCallback(function () {
@@ -172,6 +176,26 @@
         }
 
         function addChatLine(type, name, text) {
+            let length = ctx.measureText(text).width;
+            let lines = Math.ceil(length / 700);
+            let texts = [];
+            let totalLength = 0;
+            for (let i = 0; i < lines; i++) {
+                texts[i] = "";
+                for (let j = 0; j < text.length; j++) {
+                    totalLength += ctx.measureText(text[j]).width;
+                    texts[i] += text[j];
+                    if (totalLength > 700) {
+                        totalLength = 0;
+                        let texty = text.split("");
+                        texty.splice(0, j - 1)
+                        text = texty.join("");
+                        break;
+                    }
+                }
+            }
+
+
             if (type == "error") {
                 ctx.fillStyle = "red";
             } else {
@@ -187,8 +211,18 @@
             if (type == "notice") {
                 ctx.font = "italic " + ctx.font;
             }
-            ctx.fillText(text, len + 10, 30 * textRow + 20);
+            ctx.fillText(texts[0], len + 10, 30 * textRow + 20);
             textRow++;
+            if (textRow > 15) {
+                let diff = 15 - textRow
+                textRow = 15;
+                let imageData = ctx.getImageData(0, 0, c.width / 4 * 3, c.height / 8 * 7);
+                ctx.putImageData(imageData, 0, 30 * diff);
+            }
+            if (texts.length > 1) {
+                texts.shift();
+                addChatLine(type, "", texts.join(""));
+            }
         }
     </script>
 </head>
