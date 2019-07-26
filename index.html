@@ -16,13 +16,19 @@
         c.width = window.innerWidth;
         c.height = window.innerHeight;
 
-        let cursor = 0;
-        let textRow = 0;
-        let newUserId = "";
-        let playerMessage = "";
-        let scene = 0;
-        let room = "";
+        let cursor = 0; //Cursor position
+        let textRow = 0; //Row of text drawing (for chat)
+        let newUserId = ""; //Username
+        let playerMessage = ""; //Player input
+        let scene = 0; //Scene number
+        let room = ""; //Room id
         let RandomOrDefined = false; //Is the room a random room or a defined room
+        let globalText = ""; //It's like text in the onkeydown function but global
+        let sounds = [];
+        sounds[0] = new Audio("Notification_Sound.wav");
+        sounds[1] = new Audio("Join_Sound.wav");
+        sounds[2] = new Audio("Leave_Sound.wav");
+
         function splitarr(arr, n) {
             return arr.split("").map((a, b, c) => c.slice(b, b + n).join("")).filter((a, b) => b % n == 0)
         }
@@ -75,7 +81,7 @@
                         start();
                     } else if (text == "N") {
                         scene = 2;
-                        addChatLine("notice", "", "Input room ID:");
+                        start();
                     } else {
                         addChatLine("error", "", "\"" + text + "\" is not a valid input.");
                     }
@@ -102,48 +108,59 @@
             PlayerIO.authenticate("test-game-ue9bkyltk6wozndkbdwa", "public", {
                 userId: newUserId
             }, {}, function (client) {
-                addChatLine('notice', '', 'connected to PlayerIO')
 
                 if (RandomOrDefined) {
                     room = Math.floor(Math.random() * 10000) + "";
                     let list = client.multiplayer.listRooms("Chat", {}, 0, 0, (rooms) => {
                         let len = rooms.length;
-                        if (len > 0) {
-                            for (let i = 0; i < len; i++) {
-                                if (rooms[i].id == room) {
-                                    room = Math.floor(Math.random() * 10000) + "";
-                                }
+
+                        for (let i = 0; i < len; i++) {
+                            if (rooms[i].id == room) {
+                                room = Math.floor(Math.random() * 10000) + "";
                             }
                         }
+
                     });
                     let roomTextLength = ctx.measureText(room).width;
                     ctx.fillText(room, c.width - roomTextLength - 10, 50);
-                }
-                client.multiplayer.createJoinRoom(room, 'Chat', true, null, {
-                    name: newUserId
-                }, function (connection) {
-                    global.connection = connection
-                    addChatLine('notice', '', 'connected to room')
-                    connection.addMessageCallback("*", function (message) {
+                } else {
+                    addChatLine("notice", "", "Rooms:");
+                    let list = client.multiplayer.listRooms("Chat", {}, 0, 0, (rooms) => {
+                        let len = rooms.length;
 
-                        switch (message.type) {
-                            case "join":
-                                handleJoin(message);
-                                break;
-                            case "left":
-                                handleLeft(message);
-                                break;
-                            case "msg":
-                                handleMsg(message);
-                                break;
+                        for (let i = 0; i < len; i++) {
+                            addChatLine("message", "", rooms[i].id);
                         }
+                        addChatLine("notice", "", "Input room ID:");
+                    });
+                }
 
-                    });
-                    //Setup a disconnect handler:
-                    connection.addDisconnectCallback(function () {
-                        addChatLine("error", "", "disconnected from room");
-                    });
-                }, callbackError)
+                if (room != "")
+                    client.multiplayer.createJoinRoom(room, 'Chat', true, null, {
+                        name: newUserId
+                    }, function (connection) {
+                        global.connection = connection
+                        addChatLine('notice', '', 'connected to room')
+                        connection.addMessageCallback("*", function (message) {
+
+                            switch (message.type) {
+                                case "join":
+                                    handleJoin(message);
+                                    break;
+                                case "left":
+                                    handleLeft(message);
+                                    break;
+                                case "msg":
+                                    handleMsg(message);
+                                    break;
+                            }
+
+                        });
+                        //Setup a disconnect handler:
+                        connection.addDisconnectCallback(function () {
+                            addChatLine("error", "", "disconnected from room");
+                        });
+                    }, callbackError)
             }, callbackError)
         }
 
@@ -152,6 +169,7 @@
         }
 
         function handleJoin(message) {
+            sounds[1].play();
             var user = {
                 id: message.getInt(0),
                 name: message.getString(1),
@@ -161,6 +179,7 @@
         }
 
         function handleLeft(message) {
+            sounds[2].play();
             var user = global.users[message.getInt(0)]
             if (user != null) {
                 delete global.users[user.id]
@@ -169,6 +188,7 @@
         }
 
         function handleMsg(message) {
+            sounds[0].play();
             var user = global.users[message.getInt(0)]
             if (user != null && user.name != newUserId) {
                 addChatLine("message", user.name, message.getString(1))
