@@ -123,7 +123,7 @@
                     });
                     let roomTextLength = ctx.measureText(room).width;
                     ctx.fillText(room, c.width - roomTextLength - 10, 50);
-                } else {
+                } else if (scene == 2) {
                     addChatLine("notice", "", "Rooms:");
                     let list = client.multiplayer.listRooms("Chat", {}, 0, 0, (rooms) => {
                         let len = rooms.length;
